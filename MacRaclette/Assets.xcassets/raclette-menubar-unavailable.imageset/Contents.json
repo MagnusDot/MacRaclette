@@ -1,0 +1,23 @@
+{
+  "images": [
+    {
+      "filename": "raclette-menubar-unavailable-1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "raclette-menubar-unavailable-2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "raclette-menubar-unavailable-3x.png",
+      "idiom": "universal",
+      "scale": "3x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

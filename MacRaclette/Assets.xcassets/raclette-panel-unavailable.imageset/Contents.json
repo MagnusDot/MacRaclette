@@ -1,17 +1,17 @@
 {
   "images": [
     {
-      "filename": "raclette-melting-1x.png",
+      "filename": "raclette-panel-unavailable-1x.png",
       "idiom": "universal",
       "scale": "1x"
     },
     {
-      "filename": "raclette-melting-2x.png",
+      "filename": "raclette-panel-unavailable-2x.png",
       "idiom": "universal",
       "scale": "2x"
     },
     {
-      "filename": "raclette-melting-3x.png",
+      "filename": "raclette-panel-unavailable-3x.png",
       "idiom": "universal",
       "scale": "3x"
     }

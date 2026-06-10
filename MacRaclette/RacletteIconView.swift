@@ -12,7 +12,7 @@ struct RacletteIconView: View {
     var size: CGFloat = 18
 
     var body: some View {
-        Image(state.assetName)
+        Image(state.panelAssetName)
             .renderingMode(.original)
             .resizable()
             .interpolation(.high)
@@ -38,16 +38,29 @@ struct RacletteIconView: View {
 }
 
 extension RacletteVisualState {
-    var assetName: String {
+    var menuBarAssetName: String {
         switch self {
         case .unavailable:
-            return "raclette-unavailable"
+            return "raclette-menubar-unavailable"
         case .cool:
-            return "raclette-cool"
+            return "raclette-menubar-cool"
         case .melting:
-            return "raclette-melting"
+            return "raclette-menubar-melting"
         case .ready:
-            return "raclette-ready"
+            return "raclette-menubar-ready"
+        }
+    }
+
+    var panelAssetName: String {
+        switch self {
+        case .unavailable:
+            return "raclette-panel-unavailable"
+        case .cool:
+            return "raclette-panel-cool"
+        case .melting:
+            return "raclette-panel-melting"
+        case .ready:
+            return "raclette-panel-ready"
         }
     }
 }

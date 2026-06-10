@@ -1,17 +1,17 @@
 {
   "images": [
     {
-      "filename": "raclette-ready-1x.png",
+      "filename": "raclette-menubar-cool-1x.png",
       "idiom": "universal",
       "scale": "1x"
     },
     {
-      "filename": "raclette-ready-2x.png",
+      "filename": "raclette-menubar-cool-2x.png",
       "idiom": "universal",
       "scale": "2x"
     },
     {
-      "filename": "raclette-ready-3x.png",
+      "filename": "raclette-menubar-cool-3x.png",
       "idiom": "universal",
       "scale": "3x"
     }
