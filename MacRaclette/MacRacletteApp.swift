@@ -17,7 +17,8 @@ struct MacRacletteApp: App {
                 .frame(width: 340)
         } label: {
             HStack(spacing: 4) {
-                RacletteIconView(state: monitor.visualState, size: 18)
+                Image(monitor.visualState.assetName)
+                    .renderingMode(.original)
                 Text(monitor.menuBarTitle)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .monospacedDigit()
