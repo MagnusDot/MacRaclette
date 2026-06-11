@@ -2,177 +2,204 @@
 //  ContentView.swift
 //  MacRaclette
 //
-//  Created by Alois Marcellin on 10/06/2026.
-//
 
 import SwiftUI
+
+// MARK: - Root panel
 
 struct RaclettePanelView: View {
     @Bindable var monitor: RacletteMonitor
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-            temperatureGauge
-            heatSourcesSection
-            fansSection
+        VStack(alignment: .leading, spacing: 10) {
+            heroCard
+            heatSourcesCard
+            fansCard
             statsGrid
-            Divider()
-            thresholdControl
-            controls
+            thresholdCard
+            footer
         }
-        .padding(16)
+        .padding(14)
         .frame(width: 360)
         .fixedSize(horizontal: false, vertical: true)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.ultraThinMaterial)
     }
 
-    // MARK: - Header
+    // MARK: - Hero
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(headerAccent.opacity(0.15))
-                RacletteIconView(state: monitor.visualState, size: 34)
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Circle().strokeBorder(speculaStroke, lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+                    RacletteIconView(state: monitor.visualState, size: 20)
+                }
+                .frame(width: 36, height: 36)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(monitor.statusTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(monitor.statusSubtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                trendPill
             }
-            .frame(width: 48, height: 48)
+            .padding(.bottom, 10)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(monitor.statusTitle)
-                    .font(.headline)
-                Text(monitor.statusSubtitle)
-                    .font(.caption)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(monitor.hasSensors
+                     ? monitor.currentTemperature.formatted(.number.precision(.fractionLength(1)))
+                     : "--")
+                    .font(.system(size: 52, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                Text("°C")
+                    .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            .padding(.bottom, 8)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.secondary.opacity(0.15))
+                    Capsule()
+                        .fill(gaugeGradient)
+                        .frame(width: proxy.size.width * monitor.gaugeProgress)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: monitor.gaugeProgress)
+                }
+            }
+            .frame(height: 6)
+        }
+        .padding(14)
+        .background {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(heroBackground)
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(speculaStroke, lineWidth: 0.5))
+                .shadow(color: heroShadow.opacity(0.15), radius: 12, y: 4)
         }
     }
 
-    private var headerAccent: Color {
+    private var heroBackground: some ShapeStyle {
         switch monitor.visualState {
-        case .unavailable: return .secondary
+        case .unavailable:
+            return AnyShapeStyle(Color.secondary.opacity(0.08))
+        case .cool:
+            return AnyShapeStyle(LinearGradient(
+                colors: [.blue.opacity(0.18), .cyan.opacity(0.06)],
+                startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .melting:
+            return AnyShapeStyle(LinearGradient(
+                colors: [.yellow.opacity(0.20), .orange.opacity(0.08)],
+                startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .ready:
+            return AnyShapeStyle(LinearGradient(
+                colors: [.orange.opacity(0.25), .red.opacity(0.10)],
+                startPoint: .topLeading, endPoint: .bottomTrailing))
+        }
+    }
+
+    private var heroShadow: Color {
+        switch monitor.visualState {
+        case .unavailable: return .clear
         case .cool:        return .blue
         case .melting:     return .yellow
         case .ready:       return .orange
         }
     }
 
-    // MARK: - Temperature gauge
-
-    private var temperatureGauge: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(monitor.hasSensors
-                     ? monitor.currentTemperature.formatted(.number.precision(.fractionLength(1)))
-                     : "--")
-                    .font(.system(size: 42, weight: .bold, design: .rounded))
-                Text("°C")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Label(monitor.trendLabel, systemImage: monitor.trendIcon)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(monitor.trendColor)
-                    .labelStyle(.titleAndIcon)
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.secondary.opacity(0.15))
-                    Capsule()
-                        .fill(gaugeGradient)
-                        .frame(width: proxy.size.width * monitor.gaugeProgress)
-                        .animation(.spring(duration: 0.4), value: monitor.gaugeProgress)
-                }
-            }
-            .frame(height: 10)
-        }
+    private var trendPill: some View {
+        Label(monitor.trendLabel, systemImage: monitor.trendIcon)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(monitor.trendColor)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(speculaStroke, lineWidth: 0.5))
     }
 
     private var gaugeGradient: LinearGradient {
         LinearGradient(
             colors: [.blue, .green, .yellow, .orange, .red],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
+            startPoint: .leading, endPoint: .trailing)
     }
 
     // MARK: - Heat sources
 
-    private var heatSourcesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Heat Sources", icon: "flame.fill", color: .orange)
+    private var heatSourcesCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeader(title: "Heat Sources", icon: "flame.fill", color: .orange)
 
-            if monitor.categorizedSensors.isEmpty {
-                emptyLabel("No sensors detected")
-            } else {
-                VStack(spacing: 4) {
-                    ForEach(monitor.categorizedSensors, id: \.category) { item in
-                        HeatSourceRow(
-                            category: item.category,
-                            maxTemp: item.maxTemp,
-                            threshold: monitor.threshold,
-                            isHottest: item.category == monitor.hottestComponent
-                        )
+                if monitor.categorizedSensors.isEmpty {
+                    EmptyCardLabel("No sensors detected")
+                } else {
+                    VStack(spacing: 5) {
+                        ForEach(monitor.categorizedSensors.prefix(5), id: \.category) { item in
+                            HeatSourceRow(
+                                category: item.category,
+                                maxTemp: item.maxTemp,
+                                threshold: monitor.threshold,
+                                isHottest: item.category == monitor.hottestComponent
+                            )
+                        }
                     }
                 }
             }
         }
-        .cardStyle()
     }
 
     // MARK: - Fans
 
-    private var fansSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                SectionHeader(title: "Fans", icon: "fan.fill", color: .blue)
-                Spacer()
-                if !monitor.fanReadings.isEmpty {
-                    fanBoostButton
+    private var fansCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    SectionHeader(title: "Fans", icon: "fan.fill", color: .blue)
+                    Spacer()
+                    fanBoostControl
                 }
-            }
 
-            if monitor.fanReadings.isEmpty {
-                emptyLabel(monitor.fanError ?? "No fans detected")
-            } else {
-                VStack(spacing: 4) {
-                    ForEach(monitor.fanReadings) { fan in
-                        FanRow(fan: fan)
+                if monitor.fanReadings.isEmpty {
+                    EmptyCardLabel(monitor.fanError ?? "No fans detected")
+                } else {
+                    VStack(spacing: 5) {
+                        ForEach(monitor.fanReadings) { fan in
+                            FanRow(fan: fan)
+                        }
                     }
-                }
-                if monitor.fanBoostEnabled {
-                    Label("Boost active — fans at maximum speed", systemImage: "exclamationmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .padding(.top, 2)
-                } else if monitor.fanBoostUnavailable {
-                    Label("Fan control unavailable on this Mac", systemImage: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 2)
                 }
             }
         }
-        .cardStyle()
     }
 
     @ViewBuilder
-    private var fanBoostButton: some View {
-        if monitor.fanBoostUnavailable {
-            Label("Boost", systemImage: "arrow.up.circle")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-                .help("Fan control is not available on this Mac (Apple Silicon restricts SMC writes)")
+    private var fanBoostControl: some View {
+        if monitor.fanReadings.isEmpty {
+            EmptyView()
+        } else if monitor.fanBoostPending {
+            HStack(spacing: 5) {
+                ProgressView().controlSize(.mini).scaleEffect(0.8)
+                Text("Unlocking…")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        } else if monitor.fanBoostUnavailable {
+            Label("Boost unavailable", systemImage: "lock.fill")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .help("Fan control is not available on this Mac.")
         } else {
             Toggle(isOn: $monitor.fanBoostEnabled) {
                 Label("Boost", systemImage: "arrow.up.circle.fill")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 11, weight: .semibold))
             }
             .toggleStyle(.button)
             .controlSize(.mini)
@@ -180,10 +207,10 @@ struct RaclettePanelView: View {
         }
     }
 
-    // MARK: - Stats grid
+    // MARK: - Stats
 
     private var statsGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
             GridRow {
                 StatCell(title: "Min",      value: monitor.minimumTemperature.temperatureText)
                 StatCell(title: "Average",  value: monitor.averageTemperature.temperatureText)
@@ -200,57 +227,135 @@ struct RaclettePanelView: View {
 
     // MARK: - Threshold
 
-    private var thresholdControl: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Label("Raclette threshold", systemImage: "thermometer.sun")
-                    .font(.callout.weight(.semibold))
-                Spacer()
-                Text(monitor.threshold.temperatureText)
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            Slider(value: $monitor.threshold, in: 50...95, step: 1) {
-                Text("Threshold")
-            } minimumValueLabel: {
-                Text("50°").font(.caption)
-            } maximumValueLabel: {
-                Text("95°").font(.caption)
+    private var thresholdCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Raclette threshold", systemImage: "thermometer.sun")
+                        .font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Text(monitor.threshold.temperatureText)
+                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: $monitor.threshold, in: 50...95, step: 1) {
+                    Text("Threshold")
+                } minimumValueLabel: {
+                    Text("50°").font(.caption2).foregroundStyle(.tertiary)
+                } maximumValueLabel: {
+                    Text("95°").font(.caption2).foregroundStyle(.tertiary)
+                }
+                .tint(.orange)
             }
         }
     }
 
-    // MARK: - Controls
+    // MARK: - Footer
 
-    private var controls: some View {
-        HStack(spacing: 8) {
-            Toggle(isOn: $monitor.playsBell) {
-                Label("Bell", systemImage: "bell")
-            }
-            .toggleStyle(.switch)
-            .controlSize(.small)
-
+    private var footer: some View {
+        HStack(spacing: 6) {
+            GlassButton(label: "Refresh", icon: "arrow.clockwise") { monitor.sampleNow() }
+            GlassButton(label: "Reset", icon: "clock.arrow.circlepath") { monitor.resetStats() }
             Spacer()
-
-            Button(action: { monitor.sampleNow() }) {
-                Label("Refresh", systemImage: "arrow.clockwise")
+            GlassButton(label: "Quit", icon: nil, role: .destructive) {
+                NSApplication.shared.terminate(nil)
             }
-            .controlSize(.small)
-            Button(action: { monitor.resetStats() }) {
-                Label("Reset", systemImage: "clock.arrow.circlepath")
-            }
-            .controlSize(.small)
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-                .controlSize(.small)
         }
     }
+}
 
-    // MARK: - Helpers
+// MARK: - Specular highlight stroke
 
-    private func emptyLabel(_ text: String) -> some View {
+private var speculaStroke: LinearGradient {
+    LinearGradient(
+        colors: [.white.opacity(0.45), .white.opacity(0.08)],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
+}
+
+// MARK: - Glass card
+
+struct GlassCard<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(.regularMaterial.opacity(0.7))
+                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(speculaStroke, lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.07), radius: 6, y: 3)
+            }
+    }
+}
+
+// MARK: - Glass button
+
+struct GlassButton: View {
+    let label: String
+    let icon: String?
+    var role: ButtonRole? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: role, action: action) {
+            Group {
+                if let icon {
+                    Label(label, systemImage: icon)
+                } else {
+                    Text(label)
+                }
+            }
+            .font(.system(size: 11, weight: .medium))
+        }
+        .buttonStyle(GlassButtonStyle(role: role))
+    }
+}
+
+private struct GlassButtonStyle: ButtonStyle {
+    let role: ButtonRole?
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(role == .destructive
+                          ? Color.red.opacity(configuration.isPressed ? 0.22 : 0.12)
+                          : Color.primary.opacity(configuration.isPressed ? 0.12 : 0.07))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(speculaStroke, lineWidth: 0.5))
+            }
+            .foregroundStyle(role == .destructive ? .red : .primary)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Section header
+
+private struct SectionHeader: View {
+    let title: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(color)
+    }
+}
+
+// MARK: - Empty label
+
+private struct EmptyCardLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
         Text(text)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -279,31 +384,28 @@ private struct HeatSourceRow: View {
                 .frame(width: 14)
 
             Text(category.label)
-                .font(.caption.weight(.medium))
-                .frame(width: 52, alignment: .leading)
+                .font(.system(size: 11, weight: .medium))
+                .frame(width: 50, alignment: .leading)
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.secondary.opacity(0.13))
+                    Capsule().fill(.secondary.opacity(0.12))
                     Capsule()
                         .fill(barColor)
                         .frame(width: proxy.size.width * progress)
-                        .animation(.spring(duration: 0.4), value: progress)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: progress)
                 }
             }
-            .frame(height: 6)
+            .frame(height: 5)
 
             Text(maxTemp.temperatureText)
-                .font(.caption.monospacedDigit())
-                .frame(width: 54, alignment: .trailing)
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .frame(width: 50, alignment: .trailing)
 
-            if isHottest {
-                Image(systemName: "flame.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            } else {
-                Color.clear.frame(width: 12)
-            }
+            Circle()
+                .fill(isHottest ? Color.orange : .clear)
+                .frame(width: 5, height: 5)
+                .shadow(color: isHottest ? .orange.opacity(0.8) : .clear, radius: 3)
         }
     }
 }
@@ -320,25 +422,25 @@ private struct FanRow: View {
                 .frame(width: 14)
 
             Text(fan.name)
-                .font(.caption.weight(.medium))
+                .font(.system(size: 11, weight: .medium))
                 .frame(width: 36, alignment: .leading)
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.secondary.opacity(0.13))
+                    Capsule().fill(.secondary.opacity(0.12))
                     Capsule()
                         .fill(fanBarColor)
                         .frame(width: proxy.size.width * fan.percentage)
-                        .animation(.spring(duration: 0.4), value: fan.percentage)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: fan.percentage)
                 }
             }
-            .frame(height: 6)
+            .frame(height: 5)
 
             VStack(alignment: .trailing, spacing: 1) {
                 Text(rpmText)
-                    .font(.caption.monospacedDigit())
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 Text(percentText)
-                    .font(.caption2)
+                    .font(.system(size: 9))
                     .foregroundStyle(.secondary)
             }
             .frame(width: 66, alignment: .trailing)
@@ -359,20 +461,6 @@ private struct FanRow: View {
     }
 }
 
-// MARK: - Section header
-
-private struct SectionHeader: View {
-    let title: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        Label(title, systemImage: icon)
-            .font(.callout.weight(.semibold))
-            .foregroundStyle(color)
-    }
-}
-
 // MARK: - Stat cell
 
 private struct StatCell: View {
@@ -383,25 +471,24 @@ private struct StatCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .textCase(.uppercase)
+                .kerning(0.4)
             Text(value)
-                .font(.caption.weight(.semibold).monospacedDigit())
+                .font(.system(size: 13, weight: .semibold).monospacedDigit())
                 .foregroundStyle(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-// MARK: - Card style modifier
-
-private extension View {
-    func cardStyle() -> some View {
-        self
-            .padding(10)
-            .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.regularMaterial.opacity(0.5))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(speculaStroke, lineWidth: 0.5))
+        }
     }
 }
 
@@ -410,5 +497,6 @@ private extension View {
 struct RaclettePanelView_Previews: PreviewProvider {
     static var previews: some View {
         RaclettePanelView(monitor: RacletteMonitor())
+            .frame(width: 360)
     }
 }

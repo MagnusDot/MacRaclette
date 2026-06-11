@@ -2,8 +2,6 @@
 //  RacletteMonitor.swift
 //  MacRaclette
 //
-//  Created by Alois Marcellin on 10/06/2026.
-//
 
 import AppKit
 import Foundation
@@ -67,45 +65,38 @@ struct CategorizedSensors {
 @Observable
 final class RacletteMonitor {
     var threshold: Double = 72
-    var playsBell = true
-    /// Whether the user has requested fan boost. Reverts to false automatically if the hardware ignores it.
+
+    /// Toggled by the UI. The actual SMC work happens on a background thread.
     var fanBoostEnabled: Bool = false {
         didSet {
-            guard fanBoostEnabled else {
+            guard fanBoostEnabled != oldValue else { return }
+            if fanBoostEnabled {
+                activateFanBoost()
+            } else {
                 smcReader?.resetFansToAuto()
-                return
-            }
-            let worked = smcReader?.setFansToMax() ?? false
-            if !worked {
-                fanBoostEnabled = false
-                fanBoostUnavailable = true
             }
         }
     }
 
-    private(set) var currentTemperature: Double = 0
-    private(set) var currentSensorName = "No sensor"
-    private(set) var sensorReadings: [SensorReading] = []
-    private(set) var fanReadings: [FanReading] = []
-    private(set) var history: [TemperatureSample] = []
-    private(set) var thermalState: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
-    private(set) var sensorError: String?
-    private(set) var fanError: String?
-    /// Set to true the first time fan boost is attempted but the hardware doesn't honour it.
-    private(set) var fanBoostUnavailable = false
+    private(set) var fanBoostPending    = false  // true while the SMC unlock sequence is running
+    private(set) var fanBoostUnavailable = false  // true once we confirmed the hardware ignores us
 
-    private let startedAt = Date()
-    private let hidReader = HIDTemperatureReader()
-    private var smcReader: SMCReader?
-    private var timer: Timer?
-    private var wasRacletteMode = false
+    private(set) var currentTemperature: Double = 0
+    private(set) var currentSensorName  = "No sensor"
+    private(set) var sensorReadings: [SensorReading] = []
+    private(set) var fanReadings:    [FanReading]    = []
+    private(set) var history:        [TemperatureSample] = []
+    private(set) var thermalState:   ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
+    private(set) var sensorError:    String?
+    private(set) var fanError:       String?
+
+    private let startedAt   = Date()
+    private let hidReader   = HIDTemperatureReader()
+    private var smcReader:  SMCReader?
+    private var timer:      Timer?
 
     init() {
-        do {
-            smcReader = try SMCReader()
-        } catch {
-            sensorError = error.localizedDescription
-        }
+        do { smcReader = try SMCReader() } catch { sensorError = error.localizedDescription }
         sampleSensors()
         start()
     }
@@ -118,7 +109,7 @@ final class RacletteMonitor {
 
     var visualState: RacletteVisualState {
         guard hasSensors else { return .unavailable }
-        if isRacletteMode { return .ready }
+        if isRacletteMode    { return .ready }
         if gaugeProgress >= 0.78 { return .melting }
         return .cool
     }
@@ -136,12 +127,9 @@ final class RacletteMonitor {
     }
 
     var statusSubtitle: String {
-        guard hasSensors else { return sensorError ?? "No AppleSMC sensors readable." }
-        if isRacletteMode {
-            return "Raclette mode active — ring the bell, melt the cheese."
-        }
-        let hottest = categorizedSensors.first
-        let culprit = hottest.map { " — \($0.category.label) is the hottest component" } ?? ""
+        guard hasSensors else { return sensorError ?? "No sensors readable." }
+        if isRacletteMode { return "Raclette mode active — melt the cheese." }
+        let culprit = categorizedSensors.first.map { " · \($0.category.label) is hottest" } ?? ""
         return "Trigger at \(threshold.temperatureText)\(culprit)."
     }
 
@@ -217,17 +205,13 @@ final class RacletteMonitor {
             let n = sensor.name.lowercased()
             if n.contains("cpu") || n.contains("eacc") || n.contains("pacc") ||
                n.contains("efficiency") || n.contains("performance") ||
-               n.contains("e-core") || n.contains("p-core") || n.contains("die") {
-                return .cpu
-            }
+               n.contains("e-core") || n.contains("p-core") || n.contains("die") { return .cpu }
             if n.contains("gpu") || n.contains("ane") { return .gpu }
             if n.contains("battery") || n.contains("charger") { return .battery }
             if n.contains("nand") || n.contains("ssd") || n.contains("storage") { return .storage }
             if n.contains("memory") || n.contains("dram") { return .memory }
             return .system
         }
-
-        // SMC key — strip "SMC." prefix then look at characters 0 and 1
         let rawKey = sensor.key.hasPrefix("SMC.") ? String(sensor.key.dropFirst(4)) : sensor.key
         guard rawKey.count >= 2 else { return .system }
         let ch1 = rawKey[rawKey.index(rawKey.startIndex, offsetBy: 1)]
@@ -243,13 +227,30 @@ final class RacletteMonitor {
 
     // MARK: - Public actions
 
-    func sampleNow() { sampleSensors() }
-
+    func sampleNow()  { sampleSensors() }
     func resetStats() {
         history = hasSensors ? [TemperatureSample(temperature: currentTemperature, date: Date())] : []
     }
 
-    // MARK: - Private
+    // MARK: - Private: fan boost
+
+    private func activateFanBoost() {
+        fanBoostPending = true
+        let reader = smcReader
+        Task.detached { [weak self] in
+            let worked = reader?.setFansToMax() ?? false
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.fanBoostPending = false
+                if !worked {
+                    self.fanBoostEnabled    = false
+                    self.fanBoostUnavailable = true
+                }
+            }
+        }
+    }
+
+    // MARK: - Private: polling
 
     private func start() {
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -259,29 +260,22 @@ final class RacletteMonitor {
 
     private func sampleSensors() {
         thermalState = ProcessInfo.processInfo.thermalState
+        fanReadings  = smcReader?.readFanSensors() ?? []
 
-        // Read fans
-        fanReadings = smcReader?.readFanSensors() ?? []
-
-        // Read temperatures
         do {
             let readings = try readAllTemperatureSensors()
             sensorReadings = readings
-
             guard let hottest = readings.first else {
-                sensorError = "No temperature sensors readable via IOHID or AppleSMC."
+                sensorError = "No temperature sensors readable."
                 currentTemperature = 0
-                currentSensorName = "No sensor"
+                currentSensorName  = "No sensor"
                 return
             }
-
-            sensorError = nil
+            sensorError        = nil
             currentTemperature = hottest.temperature
-            currentSensorName = hottest.name
+            currentSensorName  = hottest.name
             history.append(TemperatureSample(temperature: hottest.temperature, date: Date()))
             if history.count > 180 { history.removeFirst(history.count - 180) }
-
-            handleRacletteTransition()
         } catch {
             sensorError = error.localizedDescription
         }
@@ -293,8 +287,7 @@ final class RacletteMonitor {
                 key: "HID.\(r.name)",
                 name: readableSensorName(r.name),
                 temperature: r.temperature,
-                source: .hid
-            )
+                source: .hid)
         }
         let smcReadings = (try? smcReader?.readTemperatureSensors()) ?? []
         return (hidReadings + smcReadings)
@@ -312,16 +305,6 @@ final class RacletteMonitor {
         guard let first = history.suffix(8).first else { return 0 }
         return currentTemperature - first.temperature
     }
-
-    private func handleRacletteTransition() {
-        guard isRacletteMode, !wasRacletteMode else {
-            wasRacletteMode = isRacletteMode
-            return
-        }
-        wasRacletteMode = true
-        guard playsBell else { return }
-        NSSound(named: "Glass")?.play()
-    }
 }
 
 // MARK: - Supporting types
@@ -332,9 +315,7 @@ struct TemperatureSample: Identifiable, Equatable {
     let date: Date
 }
 
-enum RacletteVisualState {
-    case unavailable, cool, melting, ready
-}
+enum RacletteVisualState { case unavailable, cool, melting, ready }
 
 extension Double {
     var temperatureText: String {
