@@ -10,17 +10,82 @@ import Foundation
 import Observation
 import SwiftUI
 
+// MARK: - Sensor category
+
+enum SensorCategory: String, Hashable, CaseIterable {
+    case cpu     = "cpu"
+    case gpu     = "gpu"
+    case battery = "battery"
+    case memory  = "memory"
+    case storage = "storage"
+    case system  = "system"
+
+    var label: String {
+        switch self {
+        case .cpu:     return "CPU"
+        case .gpu:     return "GPU"
+        case .battery: return "Battery"
+        case .memory:  return "Memory"
+        case .storage: return "Storage"
+        case .system:  return "System"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .cpu:     return "cpu"
+        case .gpu:     return "display"
+        case .battery: return "battery.100"
+        case .memory:  return "memorychip"
+        case .storage: return "internaldrive"
+        case .system:  return "thermometer.medium"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .cpu:     return .blue
+        case .gpu:     return .purple
+        case .battery: return .green
+        case .memory:  return .cyan
+        case .storage: return .orange
+        case .system:  return Color(.systemGray)
+        }
+    }
+}
+
+// MARK: - Grouped sensors
+
+struct CategorizedSensors {
+    let category: SensorCategory
+    let sensors: [SensorReading]
+    var maxTemp: Double { sensors.map(\.temperature).max() ?? 0 }
+}
+
+// MARK: - RacletteMonitor
+
 @Observable
 final class RacletteMonitor {
     var threshold: Double = 72
     var playsBell = true
+    var fanBoostEnabled: Bool = false {
+        didSet {
+            if fanBoostEnabled {
+                smcReader?.setFansToMax()
+            } else {
+                smcReader?.resetFansToAuto()
+            }
+        }
+    }
 
     private(set) var currentTemperature: Double = 0
-    private(set) var currentSensorName = "Aucun capteur"
+    private(set) var currentSensorName = "No sensor"
     private(set) var sensorReadings: [SensorReading] = []
+    private(set) var fanReadings: [FanReading] = []
     private(set) var history: [TemperatureSample] = []
     private(set) var thermalState: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
     private(set) var sensorError: String?
+    private(set) var fanError: String?
 
     private let startedAt = Date()
     private let hidReader = HIDTemperatureReader()
@@ -34,152 +99,150 @@ final class RacletteMonitor {
         } catch {
             sensorError = error.localizedDescription
         }
-
         sampleSensors()
         start()
     }
 
-    deinit {
-        timer?.invalidate()
-    }
+    deinit { timer?.invalidate() }
 
-    var isRacletteMode: Bool {
-        currentTemperature >= threshold
-    }
+    // MARK: - Derived state
+
+    var isRacletteMode: Bool { currentTemperature >= threshold }
 
     var visualState: RacletteVisualState {
-        guard hasSensors else {
-            return .unavailable
-        }
-
-        if isRacletteMode {
-            return .ready
-        }
-
-        if gaugeProgress >= 0.78 {
-            return .melting
-        }
-
+        guard hasSensors else { return .unavailable }
+        if isRacletteMode { return .ready }
+        if gaugeProgress >= 0.78 { return .melting }
         return .cool
     }
 
-    var hasSensors: Bool {
-        !sensorReadings.isEmpty
-    }
+    var hasSensors: Bool { !sensorReadings.isEmpty }
 
     var menuBarTitle: String {
-        guard hasSensors else {
-            return "Raclette ?"
-        }
-
-        if isRacletteMode {
-            return "Raclette"
-        }
-
-        return "\(Int(currentTemperature.rounded())) C"
+        guard hasSensors else { return "Raclette ?" }
+        return isRacletteMode ? "Raclette 🧀" : "\(Int(currentTemperature.rounded()))°C"
     }
 
     var statusTitle: String {
-        guard hasSensors else {
-            return "Capteurs indisponibles"
-        }
-
-        return isRacletteMode ? "Pret a servir" : "Surveillance temperature"
+        guard hasSensors else { return "Sensors unavailable" }
+        return isRacletteMode ? "Ready to serve 🧀" : "Temperature normal"
     }
 
     var statusSubtitle: String {
-        guard hasSensors else {
-            return sensorError ?? "Aucune sonde AppleSMC lisible."
+        guard hasSensors else { return sensorError ?? "No AppleSMC sensors readable." }
+        if isRacletteMode {
+            return "Raclette mode active — ring the bell, melt the cheese."
         }
-
-        return isRacletteMode
-            ? "Mode raclette actif: cloche, fromage fondu, service."
-            : "\(currentSensorName) surveille. Declenchement a \(threshold.temperatureText)."
+        let hottest = categorizedSensors.first
+        let culprit = hottest.map { " — \($0.category.label) is the hottest component" } ?? ""
+        return "Trigger at \(threshold.temperatureText)\(culprit)."
     }
 
-    var minimumTemperature: Double {
-        history.map(\.temperature).min() ?? currentTemperature
-    }
-
-    var maximumTemperature: Double {
-        history.map(\.temperature).max() ?? currentTemperature
-    }
-
+    var minimumTemperature: Double { history.map(\.temperature).min() ?? currentTemperature }
+    var maximumTemperature: Double { history.map(\.temperature).max() ?? currentTemperature }
     var averageTemperature: Double {
-        let total = history.reduce(0) { $0 + $1.temperature }
-        return history.isEmpty ? currentTemperature : total / Double(history.count)
+        history.isEmpty ? currentTemperature : history.reduce(0) { $0 + $1.temperature } / Double(history.count)
     }
 
-    var sampleCount: Int {
-        history.count
-    }
-
-    var gaugeProgress: Double {
-        min(max(currentTemperature / max(threshold, 1), 0), 1)
-    }
+    var gaugeProgress: Double { min(max(currentTemperature / max(threshold, 1), 0), 1) }
 
     var trendLabel: String {
-        let trend = temperatureTrend
-
-        if trend > 0.35 {
-            return "En hausse"
-        }
-
-        if trend < -0.35 {
-            return "En baisse"
-        }
-
+        let t = temperatureTrend
+        if t > 0.35 { return "Rising" }
+        if t < -0.35 { return "Falling" }
         return "Stable"
     }
 
+    var trendIcon: String {
+        let t = temperatureTrend
+        if t > 0.35 { return "arrow.up" }
+        if t < -0.35 { return "arrow.down" }
+        return "minus"
+    }
+
     var trendColor: Color {
-        let trend = temperatureTrend
-
-        if trend > 0.35 {
-            return .orange
-        }
-
-        if trend < -0.35 {
-            return .blue
-        }
-
+        let t = temperatureTrend
+        if t > 0.35 { return .orange }
+        if t < -0.35 { return .blue }
         return .secondary
     }
 
     var thermalStateLabel: String {
         switch thermalState {
-        case .nominal:
-            return "Normale"
-        case .fair:
-            return "Moderee"
-        case .serious:
-            return "Haute"
-        case .critical:
-            return "Critique"
-        @unknown default:
-            return "Inconnue"
+        case .nominal:  return "Normal"
+        case .fair:     return "Moderate"
+        case .serious:  return "High"
+        case .critical: return "Critical"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    var thermalStateColor: Color {
+        switch thermalState {
+        case .nominal:  return .green
+        case .fair:     return .yellow
+        case .serious:  return .orange
+        case .critical: return .red
+        @unknown default: return .secondary
         }
     }
 
     var uptimeLabel: String {
-        let elapsed = Int(Date().timeIntervalSince(startedAt))
-        let minutes = elapsed / 60
-        let seconds = elapsed % 60
-
-        return minutes > 0 ? "\(minutes)m \(seconds)s" : "\(seconds)s"
+        let s = Int(Date().timeIntervalSince(startedAt))
+        return s >= 60 ? "\(s / 60)m \(s % 60)s" : "\(s)s"
     }
 
-    func sampleNow() {
-        sampleSensors()
+    // MARK: - Sensor categorization
+
+    var categorizedSensors: [CategorizedSensors] {
+        let grouped = Dictionary(grouping: sensorReadings, by: { sensorCategory(for: $0) })
+        return SensorCategory.allCases.compactMap { cat -> CategorizedSensors? in
+            guard let sensors = grouped[cat], !sensors.isEmpty else { return nil }
+            return CategorizedSensors(category: cat, sensors: sensors)
+        }
+        .sorted { $0.maxTemp > $1.maxTemp }
     }
 
-    func resetStats() {
-        if hasSensors {
-            history = [TemperatureSample(temperature: currentTemperature, date: Date())]
-        } else {
-            history = []
+    var hottestComponent: SensorCategory? { categorizedSensors.first?.category }
+
+    private func sensorCategory(for sensor: SensorReading) -> SensorCategory {
+        if sensor.source == .hid {
+            let n = sensor.name.lowercased()
+            if n.contains("cpu") || n.contains("eacc") || n.contains("pacc") ||
+               n.contains("efficiency") || n.contains("performance") ||
+               n.contains("e-core") || n.contains("p-core") || n.contains("die") {
+                return .cpu
+            }
+            if n.contains("gpu") || n.contains("ane") { return .gpu }
+            if n.contains("battery") || n.contains("charger") { return .battery }
+            if n.contains("nand") || n.contains("ssd") || n.contains("storage") { return .storage }
+            if n.contains("memory") || n.contains("dram") { return .memory }
+            return .system
+        }
+
+        // SMC key — strip "SMC." prefix then look at characters 0 and 1
+        let rawKey = sensor.key.hasPrefix("SMC.") ? String(sensor.key.dropFirst(4)) : sensor.key
+        guard rawKey.count >= 2 else { return .system }
+        let ch1 = rawKey[rawKey.index(rawKey.startIndex, offsetBy: 1)]
+        switch ch1 {
+        case "C", "c", "j", "N", "n": return .cpu
+        case "G", "g":                 return .gpu
+        case "B", "b":                 return .battery
+        case "M", "m":                 return .memory
+        case "S", "s", "H", "h":      return .storage
+        default:                       return .system
         }
     }
+
+    // MARK: - Public actions
+
+    func sampleNow() { sampleSensors() }
+
+    func resetStats() {
+        history = hasSensors ? [TemperatureSample(temperature: currentTemperature, date: Date())] : []
+    }
+
+    // MARK: - Private
 
     private func start() {
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -190,14 +253,18 @@ final class RacletteMonitor {
     private func sampleSensors() {
         thermalState = ProcessInfo.processInfo.thermalState
 
+        // Read fans
+        fanReadings = smcReader?.readFanSensors() ?? []
+
+        // Read temperatures
         do {
             let readings = try readAllTemperatureSensors()
             sensorReadings = readings
 
             guard let hottest = readings.first else {
-                sensorError = "Aucun capteur de temperature lisible via IOHID ou AppleSMC."
+                sensorError = "No temperature sensors readable via IOHID or AppleSMC."
                 currentTemperature = 0
-                currentSensorName = "Aucun capteur"
+                currentSensorName = "No sensor"
                 return
             }
 
@@ -205,10 +272,7 @@ final class RacletteMonitor {
             currentTemperature = hottest.temperature
             currentSensorName = hottest.name
             history.append(TemperatureSample(temperature: hottest.temperature, date: Date()))
-
-            if history.count > 180 {
-                history.removeFirst(history.count - 180)
-            }
+            if history.count > 180 { history.removeFirst(history.count - 180) }
 
             handleRacletteTransition()
         } catch {
@@ -217,27 +281,17 @@ final class RacletteMonitor {
     }
 
     private func readAllTemperatureSensors() throws -> [SensorReading] {
-        let hidReadings = hidReader.readTemperatureSensors().map { reading in
+        let hidReadings = hidReader.readTemperatureSensors().map { r in
             SensorReading(
-                key: "HID.\(reading.name)",
-                name: readableSensorName(reading.name),
-                temperature: reading.temperature,
+                key: "HID.\(r.name)",
+                name: readableSensorName(r.name),
+                temperature: r.temperature,
                 source: .hid
             )
         }
-
         let smcReadings = (try? smcReader?.readTemperatureSensors()) ?? []
-
-        let readings = (hidReadings + smcReadings)
-            .sorted { first, second in
-                if first.temperature == second.temperature {
-                    return first.key < second.key
-                }
-
-                return first.temperature > second.temperature
-            }
-
-        return readings
+        return (hidReadings + smcReadings)
+            .sorted { $0.temperature != $1.temperature ? $0.temperature > $1.temperature : $0.key < $1.key }
     }
 
     private func readableSensorName(_ name: String) -> String {
@@ -248,10 +302,7 @@ final class RacletteMonitor {
     }
 
     private var temperatureTrend: Double {
-        guard let first = history.suffix(8).first else {
-            return 0
-        }
-
+        guard let first = history.suffix(8).first else { return 0 }
         return currentTemperature - first.temperature
     }
 
@@ -260,16 +311,13 @@ final class RacletteMonitor {
             wasRacletteMode = isRacletteMode
             return
         }
-
         wasRacletteMode = true
-
-        guard playsBell else {
-            return
-        }
-
+        guard playsBell else { return }
         NSSound(named: "Glass")?.play()
     }
 }
+
+// MARK: - Supporting types
 
 struct TemperatureSample: Identifiable, Equatable {
     let id = UUID()
@@ -278,14 +326,11 @@ struct TemperatureSample: Identifiable, Equatable {
 }
 
 enum RacletteVisualState {
-    case unavailable
-    case cool
-    case melting
-    case ready
+    case unavailable, cool, melting, ready
 }
 
 extension Double {
     var temperatureText: String {
-        formatted(.number.precision(.fractionLength(0...1))) + " C"
+        formatted(.number.precision(.fractionLength(0...1))) + "°C"
     }
 }

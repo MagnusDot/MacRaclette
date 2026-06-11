@@ -14,7 +14,7 @@ struct MacRacletteApp: App {
     var body: some Scene {
         MenuBarExtra {
             RaclettePanelView(monitor: monitor)
-                .frame(width: 340)
+                .frame(width: 360)
         } label: {
             HStack(spacing: 4) {
                 Image(monitor.visualState.menuBarAssetName)

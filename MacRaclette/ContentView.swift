@@ -11,190 +11,382 @@ struct RaclettePanelView: View {
     @Bindable var monitor: RacletteMonitor
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            header
-            temperatureGauge
-            statsGrid
-            sensorList
-            thresholdControl
-            controls
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                temperatureGauge
+                heatSourcesSection
+                fansSection
+                statsGrid
+                Divider()
+                thresholdControl
+                controls
+            }
+            .padding(16)
         }
-        .padding(18)
+        .frame(height: 520)
         .background(Color(nsColor: .windowBackgroundColor))
     }
+
+    // MARK: - Header
 
     private var header: some View {
         HStack(spacing: 12) {
             ZStack {
-                Circle()
-                    .fill(headerAccent.opacity(0.16))
-                RacletteIconView(state: monitor.visualState, size: 38)
+                Circle().fill(headerAccent.opacity(0.15))
+                RacletteIconView(state: monitor.visualState, size: 36)
             }
-            .frame(width: 52, height: 52)
+            .frame(width: 50, height: 50)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(monitor.statusTitle)
                     .font(.headline)
                 Text(monitor.statusSubtitle)
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
             Spacer()
         }
     }
 
     private var headerAccent: Color {
         switch monitor.visualState {
-        case .unavailable:
-            return .secondary
-        case .cool:
-            return .blue
-        case .melting:
-            return .yellow
-        case .ready:
-            return .orange
+        case .unavailable: return .secondary
+        case .cool:        return .blue
+        case .melting:     return .yellow
+        case .ready:       return .orange
         }
     }
 
+    // MARK: - Main temperature gauge
+
     private var temperatureGauge: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(monitor.hasSensors ? monitor.currentTemperature.formatted(.number.precision(.fractionLength(1))) : "--")
-                    .font(.system(size: 42, weight: .bold, design: .rounded))
-                Text("C")
-                    .font(.title3.weight(.semibold))
+                Text(monitor.hasSensors
+                     ? monitor.currentTemperature.formatted(.number.precision(.fractionLength(1)))
+                     : "--")
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                Text("°C")
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(monitor.trendLabel)
+                Label(monitor.trendLabel, systemImage: monitor.trendIcon)
                     .font(.callout.weight(.medium))
                     .foregroundStyle(monitor.trendColor)
+                    .labelStyle(.titleAndIcon)
             }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.15))
                     Capsule()
-                        .fill(Color.secondary.opacity(0.16))
-                    Capsule()
-                        .fill(monitor.isRacletteMode ? Color.orange : Color.blue)
+                        .fill(gaugeGradient)
                         .frame(width: proxy.size.width * monitor.gaugeProgress)
+                        .animation(.spring(duration: 0.4), value: monitor.gaugeProgress)
                 }
             }
             .frame(height: 10)
         }
     }
 
-    private var statsGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
-            GridRow {
-                StatCell(title: "Minimum", value: monitor.minimumTemperature.temperatureText)
-                StatCell(title: "Moyenne", value: monitor.averageTemperature.temperatureText)
-                StatCell(title: "Maximum", value: monitor.maximumTemperature.temperatureText)
-            }
-            GridRow {
-                StatCell(title: "Pression", value: monitor.thermalStateLabel)
-                StatCell(title: "Capteurs", value: "\(monitor.sensorReadings.count)")
-                StatCell(title: "Depuis", value: monitor.uptimeLabel)
-            }
-        }
+    private var gaugeGradient: LinearGradient {
+        LinearGradient(
+            colors: [.blue, .green, .yellow, .orange, .red],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
 
-    private var sensorList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Capteurs")
-                .font(.callout.weight(.semibold))
+    // MARK: - Heat sources
 
-            if monitor.sensorReadings.isEmpty {
-                Text(monitor.sensorError ?? "Aucun capteur detecte")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+    private var heatSourcesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Heat Sources", icon: "flame.fill", color: .orange)
+
+            if monitor.categorizedSensors.isEmpty {
+                emptyLabel("No sensors detected")
             } else {
-                ScrollView {
-                    VStack(spacing: 6) {
-                        ForEach(Array(monitor.sensorReadings.prefix(10))) { sensor in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(sensor.name)
-                                        .font(.caption.weight(.semibold))
-                                    Text(sensor.key)
-                                        .font(.caption2.monospaced())
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(sensor.temperature.temperatureText)
-                                        .font(.caption.monospacedDigit())
-                                    Text(sensor.source.rawValue)
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
+                VStack(spacing: 5) {
+                    ForEach(monitor.categorizedSensors, id: \.category) { item in
+                        HeatSourceRow(
+                            category: item.category,
+                            maxTemp: item.maxTemp,
+                            threshold: monitor.threshold,
+                            isHottest: item.category == monitor.hottestComponent
+                        )
                     }
                 }
-                .frame(maxHeight: 134)
+            }
+        }
+        .cardStyle()
+    }
+
+    // MARK: - Fans
+
+    private var fansSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SectionHeader(title: "Fans", icon: "fan.fill", color: .blue)
+                Spacer()
+                if !monitor.fanReadings.isEmpty {
+                    Toggle(isOn: $monitor.fanBoostEnabled) {
+                        Label("Boost", systemImage: "arrow.up.circle.fill")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .toggleStyle(.button)
+                    .controlSize(.mini)
+                    .tint(.orange)
+                }
+            }
+
+            if monitor.fanReadings.isEmpty {
+                emptyLabel(monitor.fanError ?? "No fans detected")
+            } else {
+                VStack(spacing: 5) {
+                    ForEach(monitor.fanReadings) { fan in
+                        FanRow(fan: fan)
+                    }
+                }
+                if monitor.fanBoostEnabled {
+                    Label("Boost active — fans at maximum speed", systemImage: "exclamationmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .cardStyle()
+    }
+
+    // MARK: - Stats grid
+
+    private var statsGrid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+            GridRow {
+                StatCell(title: "Min",      value: monitor.minimumTemperature.temperatureText)
+                StatCell(title: "Average",  value: monitor.averageTemperature.temperatureText)
+                StatCell(title: "Max",      value: monitor.maximumTemperature.temperatureText)
+            }
+            GridRow {
+                StatCell(title: "Pressure", value: monitor.thermalStateLabel,
+                         valueColor: monitor.thermalStateColor)
+                StatCell(title: "Sensors",  value: "\(monitor.sensorReadings.count)")
+                StatCell(title: "Uptime",   value: monitor.uptimeLabel)
             }
         }
     }
 
+    // MARK: - Threshold
+
     private var thresholdControl: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Seuil raclette")
+                Label("Raclette threshold", systemImage: "thermometer.sun")
                     .font(.callout.weight(.semibold))
                 Spacer()
                 Text(monitor.threshold.temperatureText)
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-
             Slider(value: $monitor.threshold, in: 50...95, step: 1) {
-                Text("Seuil raclette")
+                Text("Threshold")
             } minimumValueLabel: {
-                Text("50")
+                Text("50°").font(.caption)
             } maximumValueLabel: {
-                Text("95")
+                Text("95°").font(.caption)
             }
         }
     }
 
+    // MARK: - Controls
+
     private var controls: some View {
-        HStack {
-            Toggle("Cloche", isOn: $monitor.playsBell)
-                .toggleStyle(.switch)
+        HStack(spacing: 8) {
+            Toggle(isOn: $monitor.playsBell) {
+                Label("Bell", systemImage: "bell")
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+
             Spacer()
-            Button("Actualiser") {
-                monitor.sampleNow()
+
+            Button(action: { monitor.sampleNow() }) {
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
-            Button("Réinitialiser") {
-                monitor.resetStats()
+            .controlSize(.small)
+            Button(action: { monitor.resetStats() }) {
+                Label("Reset", systemImage: "clock.arrow.circlepath")
             }
-            Button("Quitter") {
-                NSApplication.shared.terminate(nil)
+            .controlSize(.small)
+            Button("Quit") { NSApplication.shared.terminate(nil) }
+                .controlSize(.small)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func emptyLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Heat source row
+
+private struct HeatSourceRow: View {
+    let category: SensorCategory
+    let maxTemp: Double
+    let threshold: Double
+    let isHottest: Bool
+
+    private var progress: Double { min(max(maxTemp / max(threshold, 1), 0), 1) }
+
+    private var barColor: Color {
+        if maxTemp >= threshold       { return .red }
+        if progress >= 0.80           { return .orange }
+        if progress >= 0.60           { return .yellow }
+        return category.color
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: category.icon)
+                .foregroundStyle(category.color)
+                .frame(width: 14)
+
+            Text(category.label)
+                .font(.caption.weight(.medium))
+                .frame(width: 52, alignment: .leading)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.13))
+                    Capsule()
+                        .fill(barColor)
+                        .frame(width: proxy.size.width * progress)
+                        .animation(.spring(duration: 0.4), value: progress)
+                }
+            }
+            .frame(height: 6)
+
+            Text(maxTemp.temperatureText)
+                .font(.caption.monospacedDigit())
+                .frame(width: 54, alignment: .trailing)
+
+            if isHottest {
+                Image(systemName: "flame.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            } else {
+                Color.clear.frame(width: 12)
             }
         }
     }
 }
 
+// MARK: - Fan row
+
+private struct FanRow: View {
+    let fan: FanReading
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "fan")
+                .foregroundStyle(.blue)
+                .frame(width: 14)
+
+            Text(fan.name)
+                .font(.caption.weight(.medium))
+                .frame(width: 36, alignment: .leading)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.13))
+                    Capsule()
+                        .fill(fanBarColor)
+                        .frame(width: proxy.size.width * fan.percentage)
+                        .animation(.spring(duration: 0.4), value: fan.percentage)
+                }
+            }
+            .frame(height: 6)
+
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(rpmText)
+                    .font(.caption.monospacedDigit())
+                Text(percentText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 66, alignment: .trailing)
+        }
+    }
+
+    private var rpmText: String {
+        let rpm = Int(fan.current.rounded())
+        return rpm > 0 ? "\(rpm) RPM" : "Stopped"
+    }
+
+    private var percentText: String { "\(Int((fan.percentage * 100).rounded()))%" }
+
+    private var fanBarColor: Color {
+        if fan.percentage > 0.85 { return .red }
+        if fan.percentage > 0.65 { return .orange }
+        return .blue
+    }
+}
+
+// MARK: - Section header
+
+private struct SectionHeader: View {
+    let title: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(color)
+    }
+}
+
+// MARK: - Stat cell
+
 private struct StatCell: View {
     let title: String
     let value: String
+    var valueColor: Color = .primary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.callout.weight(.semibold).monospacedDigit())
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+// MARK: - Card style modifier
+
+private extension View {
+    func cardStyle() -> some View {
+        self
+            .padding(10)
+            .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Preview
 
 struct RaclettePanelView_Previews: PreviewProvider {
     static var previews: some View {
