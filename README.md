@@ -11,6 +11,7 @@ A native macOS menu bar app that monitors your CPU, GPU and battery temperatures
 [![macOS](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square&logo=apple)](https://github.com/MagnusDot/MacRaclette/releases)
 [![Swift](https://img.shields.io/badge/Swift-5.9-orange?style=flat-square&logo=swift)](https://swift.org)
 [![Release](https://img.shields.io/github/v/release/MagnusDot/MacRaclette?style=flat-square)](https://github.com/MagnusDot/MacRaclette/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
 <br/>
 
