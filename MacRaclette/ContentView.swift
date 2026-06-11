@@ -1,11 +1,4 @@
-//
-//  ContentView.swift
-//  MacRaclette
-//
-
 import SwiftUI
-
-// MARK: - Root panel
 
 struct RaclettePanelView: View {
     @Bindable var monitor: RacletteMonitor
@@ -29,11 +22,11 @@ struct RaclettePanelView: View {
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(spacing: 10) {
                 ZStack {
                     Circle()
                         .fill(.ultraThinMaterial)
-                        .overlay(Circle().strokeBorder(speculaStroke, lineWidth: 0.5))
+                        .overlay(Circle().strokeBorder(specularStroke, lineWidth: 0.5))
                         .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
                     RacletteIconView(state: monitor.visualState, size: 20)
                 }
@@ -50,7 +43,12 @@ struct RaclettePanelView: View {
 
                 Spacer()
 
-                trendPill
+                Label(monitor.trendLabel, systemImage: monitor.trendIcon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(monitor.trendColor)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(specularStroke, lineWidth: 0.5))
             }
             .padding(.bottom, 10)
 
@@ -68,10 +66,10 @@ struct RaclettePanelView: View {
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
+                    Capsule().fill(.secondary.opacity(0.15))
                     Capsule()
-                        .fill(.secondary.opacity(0.15))
-                    Capsule()
-                        .fill(gaugeGradient)
+                        .fill(LinearGradient(colors: [.blue, .green, .yellow, .orange, .red],
+                                             startPoint: .leading, endPoint: .trailing))
                         .frame(width: proxy.size.width * monitor.gaugeProgress)
                         .animation(.spring(response: 0.5, dampingFraction: 0.8), value: monitor.gaugeProgress)
                 }
@@ -82,31 +80,28 @@ struct RaclettePanelView: View {
         .background {
             RoundedRectangle(cornerRadius: 16)
                 .fill(heroBackground)
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(speculaStroke, lineWidth: 0.5))
-                .shadow(color: heroShadow.opacity(0.15), radius: 12, y: 4)
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(specularStroke, lineWidth: 0.5))
+                .shadow(color: heroShadowColor.opacity(0.15), radius: 12, y: 4)
         }
     }
 
-    private var heroBackground: some ShapeStyle {
+    private var heroBackground: AnyShapeStyle {
         switch monitor.visualState {
         case .unavailable:
             return AnyShapeStyle(Color.secondary.opacity(0.08))
         case .cool:
-            return AnyShapeStyle(LinearGradient(
-                colors: [.blue.opacity(0.18), .cyan.opacity(0.06)],
-                startPoint: .topLeading, endPoint: .bottomTrailing))
+            return AnyShapeStyle(LinearGradient(colors: [.blue.opacity(0.18), .cyan.opacity(0.06)],
+                                                startPoint: .topLeading, endPoint: .bottomTrailing))
         case .melting:
-            return AnyShapeStyle(LinearGradient(
-                colors: [.yellow.opacity(0.20), .orange.opacity(0.08)],
-                startPoint: .topLeading, endPoint: .bottomTrailing))
+            return AnyShapeStyle(LinearGradient(colors: [.yellow.opacity(0.20), .orange.opacity(0.08)],
+                                                startPoint: .topLeading, endPoint: .bottomTrailing))
         case .ready:
-            return AnyShapeStyle(LinearGradient(
-                colors: [.orange.opacity(0.25), .red.opacity(0.10)],
-                startPoint: .topLeading, endPoint: .bottomTrailing))
+            return AnyShapeStyle(LinearGradient(colors: [.orange.opacity(0.25), .red.opacity(0.10)],
+                                                startPoint: .topLeading, endPoint: .bottomTrailing))
         }
     }
 
-    private var heroShadow: Color {
+    private var heroShadowColor: Color {
         switch monitor.visualState {
         case .unavailable: return .clear
         case .cool:        return .blue
@@ -115,29 +110,12 @@ struct RaclettePanelView: View {
         }
     }
 
-    private var trendPill: some View {
-        Label(monitor.trendLabel, systemImage: monitor.trendIcon)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(monitor.trendColor)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(speculaStroke, lineWidth: 0.5))
-    }
-
-    private var gaugeGradient: LinearGradient {
-        LinearGradient(
-            colors: [.blue, .green, .yellow, .orange, .red],
-            startPoint: .leading, endPoint: .trailing)
-    }
-
     // MARK: - Heat sources
 
     private var heatSourcesCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeader(title: "Heat Sources", icon: "flame.fill", color: .orange)
-
                 if monitor.categorizedSensors.isEmpty {
                     EmptyCardLabel("No sensors detected")
                 } else {
@@ -161,49 +139,15 @@ struct RaclettePanelView: View {
     private var fansCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    SectionHeader(title: "Fans", icon: "fan.fill", color: .blue)
-                    Spacer()
-                    fanBoostControl
-                }
-
+                SectionHeader(title: "Fans", icon: "fan.fill", color: .blue)
                 if monitor.fanReadings.isEmpty {
-                    EmptyCardLabel(monitor.fanError ?? "No fans detected")
+                    EmptyCardLabel("No fans detected")
                 } else {
                     VStack(spacing: 5) {
-                        ForEach(monitor.fanReadings) { fan in
-                            FanRow(fan: fan)
-                        }
+                        ForEach(monitor.fanReadings) { FanRow(fan: $0) }
                     }
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var fanBoostControl: some View {
-        if monitor.fanReadings.isEmpty {
-            EmptyView()
-        } else if monitor.fanBoostPending {
-            HStack(spacing: 5) {
-                ProgressView().controlSize(.mini).scaleEffect(0.8)
-                Text("Unlocking…")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        } else if monitor.fanBoostUnavailable {
-            Label("Boost unavailable", systemImage: "lock.fill")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.tertiary)
-                .help("Fan control is not available on this Mac.")
-        } else {
-            Toggle(isOn: $monitor.fanBoostEnabled) {
-                Label("Boost", systemImage: "arrow.up.circle.fill")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .toggleStyle(.button)
-            .controlSize(.mini)
-            .tint(.orange)
         }
     }
 
@@ -217,8 +161,7 @@ struct RaclettePanelView: View {
                 StatCell(title: "Max",      value: monitor.maximumTemperature.temperatureText)
             }
             GridRow {
-                StatCell(title: "Pressure", value: monitor.thermalStateLabel,
-                         valueColor: monitor.thermalStateColor)
+                StatCell(title: "Pressure", value: monitor.thermalStateLabel, valueColor: monitor.thermalStateColor)
                 StatCell(title: "Sensors",  value: "\(monitor.sensorReadings.count)")
                 StatCell(title: "Uptime",   value: monitor.uptimeLabel)
             }
@@ -239,7 +182,7 @@ struct RaclettePanelView: View {
                         .foregroundStyle(.secondary)
                 }
                 Slider(value: $monitor.threshold, in: 50...95, step: 1) {
-                    Text("Threshold")
+                    EmptyView()
                 } minimumValueLabel: {
                     Text("50°").font(.caption2).foregroundStyle(.tertiary)
                 } maximumValueLabel: {
@@ -255,24 +198,19 @@ struct RaclettePanelView: View {
     private var footer: some View {
         HStack(spacing: 6) {
             GlassButton(label: "Refresh", icon: "arrow.clockwise") { monitor.sampleNow() }
-            GlassButton(label: "Reset", icon: "clock.arrow.circlepath") { monitor.resetStats() }
+            GlassButton(label: "Reset",   icon: "clock.arrow.circlepath") { monitor.resetStats() }
             Spacer()
-            GlassButton(label: "Quit", icon: nil, role: .destructive) {
-                NSApplication.shared.terminate(nil)
-            }
+            GlassButton(label: "Quit", role: .destructive) { NSApplication.shared.terminate(nil) }
         }
     }
 }
 
-// MARK: - Specular highlight stroke
+// MARK: - Design primitives
 
-private var speculaStroke: LinearGradient {
-    LinearGradient(
-        colors: [.white.opacity(0.45), .white.opacity(0.08)],
-        startPoint: .topLeading, endPoint: .bottomTrailing)
+private var specularStroke: LinearGradient {
+    LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.08)],
+                   startPoint: .topLeading, endPoint: .bottomTrailing)
 }
-
-// MARK: - Glass card
 
 struct GlassCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
@@ -284,28 +222,22 @@ struct GlassCard<Content: View>: View {
             .background {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(.regularMaterial.opacity(0.7))
-                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(speculaStroke, lineWidth: 0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(specularStroke, lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.07), radius: 6, y: 3)
             }
     }
 }
 
-// MARK: - Glass button
-
 struct GlassButton: View {
     let label: String
-    let icon: String?
+    var icon: String? = nil
     var role: ButtonRole? = nil
     let action: () -> Void
 
     var body: some View {
         Button(role: role, action: action) {
             Group {
-                if let icon {
-                    Label(label, systemImage: icon)
-                } else {
-                    Text(label)
-                }
+                if let icon { Label(label, systemImage: icon) } else { Text(label) }
             }
             .font(.system(size: 11, weight: .medium))
         }
@@ -318,21 +250,18 @@ private struct GlassButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 9).padding(.vertical, 5)
             .background {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(role == .destructive
                           ? Color.red.opacity(configuration.isPressed ? 0.22 : 0.12)
                           : Color.primary.opacity(configuration.isPressed ? 0.12 : 0.07))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(speculaStroke, lineWidth: 0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(specularStroke, lineWidth: 0.5))
             }
             .foregroundStyle(role == .destructive ? .red : .primary)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
-
-// MARK: - Section header
 
 private struct SectionHeader: View {
     let title: String
@@ -346,21 +275,17 @@ private struct SectionHeader: View {
     }
 }
 
-// MARK: - Empty label
-
 private struct EmptyCardLabel: View {
     let text: String
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.tertiary)
+        Text(text).font(.caption).foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-// MARK: - Heat source row
+// MARK: - Rows
 
 private struct HeatSourceRow: View {
     let category: SensorCategory
@@ -379,89 +304,58 @@ private struct HeatSourceRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: category.icon)
-                .foregroundStyle(category.color)
-                .frame(width: 14)
-
-            Text(category.label)
-                .font(.system(size: 11, weight: .medium))
-                .frame(width: 50, alignment: .leading)
-
+            Image(systemName: category.icon).foregroundStyle(category.color).frame(width: 14)
+            Text(category.label).font(.system(size: 11, weight: .medium)).frame(width: 50, alignment: .leading)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.secondary.opacity(0.12))
-                    Capsule()
-                        .fill(barColor)
+                    Capsule().fill(barColor)
                         .frame(width: proxy.size.width * progress)
                         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: progress)
                 }
             }
             .frame(height: 5)
-
             Text(maxTemp.temperatureText)
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .frame(width: 50, alignment: .trailing)
-
-            Circle()
-                .fill(isHottest ? Color.orange : .clear)
-                .frame(width: 5, height: 5)
+            Circle().fill(isHottest ? Color.orange : .clear).frame(width: 5, height: 5)
                 .shadow(color: isHottest ? .orange.opacity(0.8) : .clear, radius: 3)
         }
     }
 }
 
-// MARK: - Fan row
-
 private struct FanRow: View {
     let fan: FanReading
 
+    private var barColor: Color {
+        if fan.percentage > 0.85 { return .red }
+        if fan.percentage > 0.65 { return .orange }
+        return .blue
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "fan")
-                .foregroundStyle(.blue)
-                .frame(width: 14)
-
-            Text(fan.name)
-                .font(.system(size: 11, weight: .medium))
-                .frame(width: 36, alignment: .leading)
-
+            Image(systemName: "fan").foregroundStyle(.blue).frame(width: 14)
+            Text(fan.name).font(.system(size: 11, weight: .medium)).frame(width: 38, alignment: .leading)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.secondary.opacity(0.12))
-                    Capsule()
-                        .fill(fanBarColor)
+                    Capsule().fill(barColor)
                         .frame(width: proxy.size.width * fan.percentage)
                         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: fan.percentage)
                 }
             }
             .frame(height: 5)
-
             VStack(alignment: .trailing, spacing: 1) {
-                Text(rpmText)
+                Text(fan.current > 0 ? "\(Int(fan.current.rounded())) RPM" : "Stopped")
                     .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                Text(percentText)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                Text("\(Int((fan.percentage * 100).rounded()))%")
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
             }
             .frame(width: 66, alignment: .trailing)
         }
     }
-
-    private var rpmText: String {
-        let rpm = Int(fan.current.rounded())
-        return rpm > 0 ? "\(rpm) RPM" : "Stopped"
-    }
-
-    private var percentText: String { "\(Int((fan.percentage * 100).rounded()))%" }
-
-    private var fanBarColor: Color {
-        if fan.percentage > 0.85 { return .red }
-        if fan.percentage > 0.65 { return .orange }
-        return .blue
-    }
 }
-
-// MARK: - Stat cell
 
 private struct StatCell: View {
     let title: String
@@ -470,33 +364,23 @@ private struct StatCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .textCase(.uppercase)
-                .kerning(0.4)
-            Text(value)
-                .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                .foregroundStyle(valueColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                .textCase(.uppercase).kerning(0.4)
+            Text(value).font(.system(size: 13, weight: .semibold).monospacedDigit())
+                .foregroundStyle(valueColor).lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10).padding(.vertical, 8)
         .background {
             RoundedRectangle(cornerRadius: 10)
                 .fill(.regularMaterial.opacity(0.5))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(speculaStroke, lineWidth: 0.5))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(specularStroke, lineWidth: 0.5))
         }
     }
 }
 
 // MARK: - Preview
 
-struct RaclettePanelView_Previews: PreviewProvider {
-    static var previews: some View {
-        RaclettePanelView(monitor: RacletteMonitor())
-            .frame(width: 360)
-    }
+#Preview {
+    RaclettePanelView(monitor: RacletteMonitor()).frame(width: 360)
 }
