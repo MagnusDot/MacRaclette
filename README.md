@@ -1,57 +1,80 @@
-# Mac Raclette
+<div align="center">
 
-Mac Raclette is a small macOS menu bar utility that turns thermal monitoring into a raclette joke.
+<img src="MacRaclette/Assets.xcassets/raclette-panel-ready.imageset/raclette-panel-ready-3x.png" width="120" />
 
-When the hottest readable temperature sensor goes above a configurable threshold, the app switches into **Raclette mode**: the menu bar icon changes to melted cheese, a bell can play, and the panel shows that the machine is "ready to serve".
+# MacRaclette
+
+**Your Mac is hot enough. Time to melt some cheese.**
+
+A native macOS menu bar app that monitors your CPU, GPU and battery temperatures in real time — and tells you when your Mac is ready to serve raclette. 🧀
+
+[![macOS](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square&logo=apple)](https://github.com/MagnusDot/MacRaclette/releases)
+[![Swift](https://img.shields.io/badge/Swift-5.9-orange?style=flat-square&logo=swift)](https://swift.org)
+[![Release](https://img.shields.io/github/v/release/MagnusDot/MacRaclette?style=flat-square)](https://github.com/MagnusDot/MacRaclette/releases/latest)
+
+<br/>
+
+![MacRaclette panel screenshot](screenshots/Screen%201.png)
+
+<img src="screenshots/screen%202.png" width="200" />
+
+</div>
+
+---
+
+## What it does
+
+MacRaclette sits quietly in your menu bar, watching your Mac's temperature sensors. Set a threshold, and when your machine crosses it — the icon melts into cheese and raclette mode activates.
+
+Beyond the joke, it's a genuinely useful thermal monitor: live heat source breakdown by component, fan RPM, session stats, and a trend indicator so you know if things are heating up or cooling down.
+
+<div align="center">
+
+| Cool | Melting | Ready 🧀 |
+|:---:|:---:|:---:|
+| ![cool](MacRaclette/Assets.xcassets/raclette-panel-cool.imageset/raclette-panel-cool-3x.png) | ![melting](MacRaclette/Assets.xcassets/raclette-panel-melting.imageset/raclette-panel-melting-3x.png) | ![ready](MacRaclette/Assets.xcassets/raclette-panel-ready.imageset/raclette-panel-ready-3x.png) |
+| Below threshold | Getting there | Raclette time |
+
+</div>
+
+---
 
 ## Features
 
-- Native macOS menu bar app built with SwiftUI `MenuBarExtra`.
-- Real sensor readings where available:
-  - IOHID temperature sensors for Apple Silicon Macs.
-  - AppleSMC temperature sensors as a fallback/complement on Macs that expose them.
-- Dynamic raclette icons in the menu bar:
-  - unavailable
-  - cool
-  - melting
-  - ready
-- Compact popover with:
-  - current hottest sensor temperature
-  - minimum, average, and maximum since reset
-  - thermal pressure state
-  - detected sensor list with source (`HID` or `SMC`)
-  - configurable raclette threshold
-  - bell toggle
-  - refresh, reset, and quit actions
+- 🌡️ **Live sensor readings** — Apple HID + SMC, works on Apple Silicon and Intel
+- 🔥 **Heat source breakdown** — CPU, GPU, battery, memory, storage with animated bars
+- 💨 **Fan monitoring** — real-time RPM and load percentage
+- 📊 **Session stats** — min / avg / max temperature and thermal pressure
+- 📈 **Trend indicator** — Rising, Stable, or Falling at a glance
+- 🎛️ **Adjustable threshold** — set your own raclette temperature
+- 🍎 **Truly native** — SwiftUI, no Dock icon, no telemetry, no network
 
-## Requirements
+---
 
-- macOS with SwiftUI `MenuBarExtra` support.
-- Xcode to build and run the app.
-- Sensor availability depends on the Mac model and macOS version. Apple Silicon machines usually expose temperature sensors through IOHID, while Intel machines may expose AppleSMC keys.
+## Installation
 
-## Building
+1. Download `MacRaclette.dmg` from the [latest release](https://github.com/MagnusDot/MacRaclette/releases/latest)
+2. Open the DMG and drag **MacRaclette** into your Applications folder
+3. First launch: **right-click → Open** (app is not notarized)
 
-Open `MacRaclette.xcodeproj` in Xcode and run the `MacRaclette` scheme.
+> Requires macOS 14 Sonoma or later.
 
-The app is configured as a menu bar agent using `LSUIElement`, so it appears in the menu bar instead of the Dock.
+---
 
-## Sensor Notes
+## Build from source
 
-macOS does not provide one stable public API for every temperature sensor on every Mac. Mac Raclette uses two approaches:
+```bash
+git clone https://github.com/MagnusDot/MacRaclette.git
+cd MacRaclette
+make build
+```
 
-- `HIDTemperatureReader`: reads Apple vendor temperature sensors through IOHID.
-- `SMCReader`: reads AppleSMC keys that look like temperature sensors.
+Or open `MacRaclette.xcodeproj` in Xcode and run the `MacRaclette` scheme.
 
-If no sensors are available, the app shows a sensor unavailable state instead of inventing a fake temperature.
+---
 
-## Assets
+<div align="center">
 
-The raclette logos live in `MacRaclette/Assets.xcassets`.
+*Made with SwiftUI · No App Store · No tracking*
 
-There are separate assets for:
-
-- `raclette-menubar-*`: small, centered menu bar icons.
-- `raclette-panel-*`: larger panel icons.
-
-This keeps the menu bar icon crisp and correctly sized while allowing the popover to use a more detailed version.
+</div>

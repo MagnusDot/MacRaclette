@@ -49,12 +49,12 @@ tag:
 	git tag $(NEXT_PATCH)
 	git push origin $(NEXT_PATCH)
 
-## Build DMG and publish a GitHub Release for VERSION
+## Build DMG and open GitHub to publish the release manually
 release: dmg
-	gh release create $(VERSION) "$(DMG)" \
-		--title "$(APP_NAME) $(VERSION)" \
-		--notes "## Installation\n1. Ouvre le DMG\n2. Glisse $(APP_NAME) dans Applications\n3. Premier lancement : clic-droit → Ouvrir"
-	@echo "→ Released $(VERSION)"
+	@echo "→ DMG prêt : $(DMG)"
+	@echo "→ Ouvre GitHub pour créer la release manuellement :"
+	open "https://github.com/MagnusDot/MacRaclette/releases/new?tag=$(VERSION)"
+	open "$(shell pwd)/dist"
 
 ## Generate all AppIcon sizes from icon_1024.png
 icons:
