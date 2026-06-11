@@ -112,17 +112,23 @@ final class SMCReader {
         }
     }
 
-    /// Attempt to set all fans to their maximum speed. Silently fails on Apple Silicon.
-    func setFansToMax() {
-        guard let rawCount = try? readUInt32(key: "FNum"), rawCount > 0 else { return }
+    /// Attempt to set all fans to maximum. Returns true only if at least one write was verified by read-back.
+    /// On Apple Silicon the SMC ignores fan writes, so this reliably returns false there.
+    @discardableResult
+    func setFansToMax() -> Bool {
+        guard let rawCount = try? readUInt32(key: "FNum"), rawCount > 0 else { return false }
+        var verified = false
         for i in 0..<min(Int(rawCount), 8) {
-            if let maxRPM = try? readDouble(key: "F\(i)Mx") {
-                try? writeKey("F\(i)Tg", fpe2Value: maxRPM)
+            guard let maxRPM = try? readDouble(key: "F\(i)Mx") else { continue }
+            try? writeKey("F\(i)Tg", fpe2Value: maxRPM)
+            if let readBack = try? readDouble(key: "F\(i)Tg"), abs(readBack - maxRPM) < 200 {
+                verified = true
             }
         }
+        return verified
     }
 
-    /// Attempt to return all fans to automatic control. Silently fails on Apple Silicon.
+    /// Attempt to return all fans to automatic control.
     func resetFansToAuto() {
         guard let rawCount = try? readUInt32(key: "FNum"), rawCount > 0 else { return }
         for i in 0..<min(Int(rawCount), 8) {

@@ -11,20 +11,19 @@ struct RaclettePanelView: View {
     @Bindable var monitor: RacletteMonitor
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                header
-                temperatureGauge
-                heatSourcesSection
-                fansSection
-                statsGrid
-                Divider()
-                thresholdControl
-                controls
-            }
-            .padding(16)
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            temperatureGauge
+            heatSourcesSection
+            fansSection
+            statsGrid
+            Divider()
+            thresholdControl
+            controls
         }
-        .frame(height: 520)
+        .padding(16)
+        .frame(width: 360)
+        .fixedSize(horizontal: false, vertical: true)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -34,11 +33,11 @@ struct RaclettePanelView: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle().fill(headerAccent.opacity(0.15))
-                RacletteIconView(state: monitor.visualState, size: 36)
+                RacletteIconView(state: monitor.visualState, size: 34)
             }
-            .frame(width: 50, height: 50)
+            .frame(width: 48, height: 48)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(monitor.statusTitle)
                     .font(.headline)
                 Text(monitor.statusSubtitle)
@@ -60,7 +59,7 @@ struct RaclettePanelView: View {
         }
     }
 
-    // MARK: - Main temperature gauge
+    // MARK: - Temperature gauge
 
     private var temperatureGauge: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -68,7 +67,7 @@ struct RaclettePanelView: View {
                 Text(monitor.hasSensors
                      ? monitor.currentTemperature.formatted(.number.precision(.fractionLength(1)))
                      : "--")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
                 Text("°C")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -109,7 +108,7 @@ struct RaclettePanelView: View {
             if monitor.categorizedSensors.isEmpty {
                 emptyLabel("No sensors detected")
             } else {
-                VStack(spacing: 5) {
+                VStack(spacing: 4) {
                     ForEach(monitor.categorizedSensors, id: \.category) { item in
                         HeatSourceRow(
                             category: item.category,
@@ -132,20 +131,14 @@ struct RaclettePanelView: View {
                 SectionHeader(title: "Fans", icon: "fan.fill", color: .blue)
                 Spacer()
                 if !monitor.fanReadings.isEmpty {
-                    Toggle(isOn: $monitor.fanBoostEnabled) {
-                        Label("Boost", systemImage: "arrow.up.circle.fill")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .toggleStyle(.button)
-                    .controlSize(.mini)
-                    .tint(.orange)
+                    fanBoostButton
                 }
             }
 
             if monitor.fanReadings.isEmpty {
                 emptyLabel(monitor.fanError ?? "No fans detected")
             } else {
-                VStack(spacing: 5) {
+                VStack(spacing: 4) {
                     ForEach(monitor.fanReadings) { fan in
                         FanRow(fan: fan)
                     }
@@ -155,16 +148,42 @@ struct RaclettePanelView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                         .padding(.top, 2)
+                } else if monitor.fanBoostUnavailable {
+                    Label("Fan control unavailable on this Mac", systemImage: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                 }
             }
         }
         .cardStyle()
     }
 
+    @ViewBuilder
+    private var fanBoostButton: some View {
+        if monitor.fanBoostUnavailable {
+            Label("Boost", systemImage: "arrow.up.circle")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                .help("Fan control is not available on this Mac (Apple Silicon restricts SMC writes)")
+        } else {
+            Toggle(isOn: $monitor.fanBoostEnabled) {
+                Label("Boost", systemImage: "arrow.up.circle.fill")
+                    .font(.caption.weight(.semibold))
+            }
+            .toggleStyle(.button)
+            .controlSize(.mini)
+            .tint(.orange)
+        }
+    }
+
     // MARK: - Stats grid
 
     private var statsGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
             GridRow {
                 StatCell(title: "Min",      value: monitor.minimumTemperature.temperatureText)
                 StatCell(title: "Average",  value: monitor.averageTemperature.temperatureText)
@@ -247,9 +266,9 @@ private struct HeatSourceRow: View {
     private var progress: Double { min(max(maxTemp / max(threshold, 1), 0), 1) }
 
     private var barColor: Color {
-        if maxTemp >= threshold       { return .red }
-        if progress >= 0.80           { return .orange }
-        if progress >= 0.60           { return .yellow }
+        if maxTemp >= threshold { return .red }
+        if progress >= 0.80    { return .orange }
+        if progress >= 0.60    { return .yellow }
         return category.color
     }
 

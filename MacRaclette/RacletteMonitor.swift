@@ -68,12 +68,17 @@ struct CategorizedSensors {
 final class RacletteMonitor {
     var threshold: Double = 72
     var playsBell = true
+    /// Whether the user has requested fan boost. Reverts to false automatically if the hardware ignores it.
     var fanBoostEnabled: Bool = false {
         didSet {
-            if fanBoostEnabled {
-                smcReader?.setFansToMax()
-            } else {
+            guard fanBoostEnabled else {
                 smcReader?.resetFansToAuto()
+                return
+            }
+            let worked = smcReader?.setFansToMax() ?? false
+            if !worked {
+                fanBoostEnabled = false
+                fanBoostUnavailable = true
             }
         }
     }
@@ -86,6 +91,8 @@ final class RacletteMonitor {
     private(set) var thermalState: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
     private(set) var sensorError: String?
     private(set) var fanError: String?
+    /// Set to true the first time fan boost is attempted but the hardware doesn't honour it.
+    private(set) var fanBoostUnavailable = false
 
     private let startedAt = Date()
     private let hidReader = HIDTemperatureReader()
